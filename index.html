@@ -623,15 +623,13 @@ async function fetchAircraft() {
     setStatus('loading', 'Pobieranie…');
 
     const { lamin, lomin, lamax, lomax } = FETCH_BOUNDS;
-    let url = `https://opensky-network.org/api/states/all?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`;
-
-    const opts = {};
-    if (OPENSKY_USER && OPENSKY_PASS) {
-        opts.headers = { Authorization: 'Basic ' + btoa(`${OPENSKY_USER}:${OPENSKY_PASS}`) };
-    }
+    const base = (OPENSKY_USER && OPENSKY_PASS)
+        ? `https://${encodeURIComponent(OPENSKY_USER)}:${encodeURIComponent(OPENSKY_PASS)}@opensky-network.org`
+        : 'https://opensky-network.org';
+    const url = `${base}/api/states/all?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`;
 
     try {
-        const resp = await fetch(url, opts);
+        const resp = await fetch(url);
 
         if (resp.status === 429) {
             throw new Error('Przekroczono limit zapytań API. Spróbuj za chwilę.');
