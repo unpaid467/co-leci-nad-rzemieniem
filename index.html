@@ -318,7 +318,7 @@
     <div id="status-bar">
         <span class="pulse-dot" id="status-dot"></span>
         <span id="last-update">Łączenie…</span>
-        <span class="hide-mobile">Odświeżenie za: <span id="countdown" style="font-variant-numeric:tabular-nums">--</span> s</span>
+        <span class="hide-mobile" id="countdown-wrap" style="display:none"></span>
         <button id="refresh-btn" onclick="manualRefresh()">⟳ Odśwież</button>
     </div>
 </div>
@@ -379,19 +379,18 @@ const FETCH_BOUNDS = {
 const MAP_CENTER = [50.2148, 21.5124];
 const MAP_ZOOM   = 11;
 
-const REFRESH_SEC = 60; // seconds between auto-refreshes
+const REFRESH_SEC = 60; // kept for sidebar label only
 
 // Optional: add OpenSky credentials for higher rate limits
 // Leave empty strings for anonymous access (400 req/day)
-const OPENSKY_USER = 'garlic837';
-const OPENSKY_PASS = 'nNTY*0U3kdjQr^SKR5N64T';
+const OPENSKY_USER = '';
+const OPENSKY_PASS = '';
 
 // ── STATE ─────────────────────────────────────────────────
 let map;
 let markers     = {};  // icao24 → L.marker
 let aircraftDB  = {};  // icao24 → parsed object
 let selectedIcao = null;
-let countdownId, refreshId;
 
 // ── MAP INIT ──────────────────────────────────────────────
 function initMap() {
@@ -623,10 +622,7 @@ async function fetchAircraft() {
     setStatus('loading', 'Pobieranie…');
 
     const { lamin, lomin, lamax, lomax } = FETCH_BOUNDS;
-    const base = (OPENSKY_USER && OPENSKY_PASS)
-        ? `https://${encodeURIComponent(OPENSKY_USER)}:${encodeURIComponent(OPENSKY_PASS)}@opensky-network.org`
-        : 'https://opensky-network.org';
-    const url = `${base}/api/states/all?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`;
+    const url = `https://opensky-network.org/api/states/all?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`;
 
     try {
         const resp = await fetch(url);
@@ -662,31 +658,9 @@ async function fetchAircraft() {
         setStatus('error', 'Błąd połączenia');
         showError(err.message);
     }
-
-    startCountdown();
-}
-
-// ── COUNTDOWN ─────────────────────────────────────────────
-function startCountdown() {
-    clearInterval(countdownId);
-    clearTimeout(refreshId);
-
-    let remaining = REFRESH_SEC;
-    const el = document.getElementById('countdown');
-    el.textContent = remaining;
-
-    countdownId = setInterval(() => {
-        remaining = Math.max(0, remaining - 1);
-        el.textContent = remaining;
-        if (remaining === 0) clearInterval(countdownId);
-    }, 1000);
-
-    refreshId = setTimeout(fetchAircraft, REFRESH_SEC * 1000);
 }
 
 function manualRefresh() {
-    clearInterval(countdownId);
-    clearTimeout(refreshId);
     fetchAircraft();
 }
 
