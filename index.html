@@ -444,23 +444,23 @@ function makePlaneIcon(heading, onGround, isSelected) {
 }
 
 // ── FORMATTERS ─────────────────────────────────────────────
-function fmtAlt(m) {
-    if (m == null) return 'N/D';
-    return `${Math.round(m)} m\u00a0/\u00a0${Math.round(m * 3.28084)} ft`;
+function fmtAlt(ft) {
+    if (ft == null) return 'N/D';
+    return `${Math.round(ft).toLocaleString()} ft\u00a0/\u00a0${Math.round(ft * 0.3048)} m`;
 }
-function fmtSpeed(ms) {
-    if (ms == null) return 'N/D';
-    return `${Math.round(ms * 3.6)} km/h`;
+function fmtSpeed(kts) {
+    if (kts == null) return 'N/D';
+    return `${Math.round(kts)} kts\u00a0/\u00a0${Math.round(kts * 1.852)} km/h`;
 }
 function fmtHeading(deg) {
     if (deg == null) return 'N/D';
     const dirs = ['N','NE','E','SE','S','SW','W','NW','N'];
     return `${Math.round(deg)}°\u00a0(${dirs[Math.round(deg / 45) % 8]})`;
 }
-function fmtVRate(vr) {
-    if (vr == null) return '→ poziomo';
-    if (vr >  1) return `↑ wznoszenie ${Math.round(vr * 60)} m/min`;
-    if (vr < -1) return `↓ opadanie ${Math.round(Math.abs(vr) * 60)} m/min`;
+function fmtVRate(fpm) {
+    if (fpm == null) return '→ poziomo';
+    if (fpm >  50) return `↑ wznoszenie ${Math.round(fpm)} ft/min`;
+    if (fpm < -50) return `↓ opadanie ${Math.round(Math.abs(fpm))} ft/min`;
     return '→ poziomo';
 }
 function fmtTime(ts) {
@@ -468,24 +468,25 @@ function fmtTime(ts) {
     return new Date(ts * 1000).toLocaleTimeString('pl-PL');
 }
 
-// ── PARSE OPENSKY STATE VECTOR ─────────────────────────────
-// https://openskynetwork.github.io/opensky-api/rest.html#response
-function parseState(s) {
+// ── PARSE AIRPLANES.LIVE AIRCRAFT OBJECT ─────────────────────
+// https://airplanes.live/rest-api-adsb-data-field-descriptions/
+function parseAircraft(a) {
+    const onGround = a.alt_baro === 'ground';
+    const altFt    = onGround ? 0 : (typeof a.alt_baro === 'number' ? a.alt_baro : null);
     return {
-        icao24:      s[0],
-        callsign:    (s[1] || '').trim() || s[0].toUpperCase(),
-        country:     s[2] || 'Nieznany',
-        timePosUTC:  s[3],
-        lastContact: s[4],
-        lon:         s[5],
-        lat:         s[6],
-        baroAlt:     s[7],
-        onGround:    s[8],
-        velocity:    s[9],
-        heading:     s[10],
-        vertRate:    s[11],
-        geoAlt:      s[13],
-        squawk:      s[14] || '–'
+        icao24:      a.hex,
+        callsign:    (a.flight || '').trim() || a.hex.toUpperCase(),
+        reg:         a.r  || '–',
+        acType:      a.t  || '–',
+        lastContact: a.seen != null ? Math.floor(Date.now() / 1000) - Math.round(a.seen) : null,
+        lon:         a.lon,
+        lat:         a.lat,
+        baroAlt:     altFt,
+        onGround:    onGround,
+        velocity:    a.gs,
+        heading:     a.track,
+        vertRate:    a.baro_rate,
+        squawk:      a.squawk || '–'
     };
 }
 
@@ -558,7 +559,8 @@ function selectAircraft(icao) {
                 </div>
                 <div class="popup-grid">
                     <span class="lbl">ICAO24:</span>  <span class="val">${escHtml(ac.icao24.toUpperCase())}</span>
-                    <span class="lbl">Kraj:</span>     <span class="val">${escHtml(ac.country)}</span>
+                    <span class="lbl">Rejestracja:</span> <span class="val">${escHtml(ac.reg)}</span>
+                    <span class="lbl">Typ:</span>      <span class="val">${escHtml(ac.acType)}</span>
                     <span class="lbl">Pułap:</span>    <span class="val">${fmtAlt(ac.baroAlt)}</span>
                     <span class="lbl">Prędkość:</span> <span class="val">${fmtSpeed(ac.velocity)}</span>
                     <span class="lbl">Kurs:</span>     <span class="val">${fmtHeading(ac.heading)}</span>
@@ -587,7 +589,7 @@ function renderList(acList) {
             <div class="no-planes">
                 <span class="big">🛩</span>
                 Brak samolotów w zasięgu.<br>
-                <span style="font-size:0.78rem;opacity:0.7">Dane odświeżają się co ${REFRESH_SEC} sekund.</span>
+                <span style="font-size:0.78rem;opacity:0.7">Kliknij ⟳ Odśwież, aby zaktualizować dane.</span>
             </div>`;
         return;
     }
@@ -609,9 +611,9 @@ function renderList(acList) {
                 </span>
             </div>
             <div class="card-grid">
-                <span>Kraj:</span>      <span class="val">${escHtml(ac.country)}</span>
-                <span>Pułap:</span>     <span class="val">${ac.baroAlt != null ? Math.round(ac.baroAlt) + ' m' : 'N/D'}</span>
-                <span>Prędkość:</span>  <span class="val">${ac.velocity != null ? Math.round(ac.velocity * 3.6) + ' km/h' : 'N/D'}</span>
+                <span>Rej./Typ:</span>  <span class="val">${escHtml(ac.reg)}${ac.acType !== '–' ? ' · ' + escHtml(ac.acType) : ''}</span>
+                <span>Pułap:</span>     <span class="val">${ac.baroAlt != null && !ac.onGround ? Math.round(ac.baroAlt).toLocaleString() + ' ft' : (ac.onGround ? 'Na ziemi' : 'N/D')}</span>
+                <span>Prędkość:</span>  <span class="val">${ac.velocity != null ? Math.round(ac.velocity) + ' kts' : 'N/D'}</span>
                 <span>Kurs:</span>      <span class="val">${ac.heading != null ? Math.round(ac.heading) + '°' : 'N/D'}</span>
             </div>
         </div>`).join('');
@@ -621,8 +623,7 @@ function renderList(acList) {
 async function fetchAircraft() {
     setStatus('loading', 'Pobieranie…');
 
-    const { lamin, lomin, lamax, lomax } = FETCH_BOUNDS;
-    const url = `https://opensky-network.org/api/states/all?lamin=${lamin}&lomin=${lomin}&lamax=${lamax}&lomax=${lomax}`;
+    const url = `https://api.airplanes.live/v2/point/${MAP_CENTER[0]}/${MAP_CENTER[1]}/10`;
 
     try {
         const resp = await fetch(url);
@@ -635,9 +636,8 @@ async function fetchAircraft() {
         }
 
         const data   = await resp.json();
-        const states = data.states || [];
-        const parsed = states
-            .map(parseState)
+        const parsed = (data.ac || [])
+            .map(parseAircraft)
             .filter(ac => ac.lat != null && ac.lon != null);
 
         // Update DB and markers
